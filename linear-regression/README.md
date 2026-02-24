@@ -4,12 +4,12 @@ This project focuses on predicting **Life Expectancy** using **regression-based 
 
 ---
 
-## 📌 Project Overview
+##  Project Overview
 The objective of this project is to analyze **health, economic, and demographic factors** and build predictive models to estimate life expectancy.
 
 ---
 
-## 🛠️ Tools & Technologies
+##  Tools & Technologies
 - Python  
 - Pandas, NumPy  
 - Matplotlib, Seaborn  
@@ -17,7 +17,7 @@ The objective of this project is to analyze **health, economic, and demographic 
 
 ---
 
-## 🔄 Workflow
+##  Workflow
 - Data cleaning and preprocessing  
 - Handling missing values  
 - Exploratory Data Analysis (EDA)  
@@ -27,7 +27,7 @@ The objective of this project is to analyze **health, economic, and demographic 
 
 ---
 
-## 🤖 Models Implemented
+##  Models Implemented
 - Linear Regression  
 - Lasso Regression (L1 Regularization)  
 - Ridge Regression (L2 Regularization)  
@@ -35,7 +35,7 @@ The objective of this project is to analyze **health, economic, and demographic 
 
 ---
 
-## 📊 Evaluation Metrics
+##  Evaluation Metrics
 - R² Score  
 - Mean Absolute Error (MAE)  
 - Mean Squared Error (MSE)  
@@ -43,14 +43,14 @@ The objective of this project is to analyze **health, economic, and demographic 
 
 ---
 
-## 📈 Results & Insights
+##  Results & Insights
 - All models achieved consistent performance with **R² ≈ 0.83**, indicating a strong linear relationship between input features and life expectancy.  
 - **ElasticNet Regression** provided the best generalization with the lowest RMSE.  
 - **Linear Regression** served as a strong baseline model.
 
 ---
 
-## 📉 Visualizations Included
+##  Visualizations Included
 - Distribution analysis  
 - Correlation heatmap  
 - Feature relationship analysis  
@@ -58,12 +58,12 @@ The objective of this project is to analyze **health, economic, and demographic 
 
 ---
 
-## ✅ Conclusion
+##  Conclusion
 This project strengthened my understanding of **regression modeling**, **regularization techniques**, and **end-to-end machine learning workflows** on real-world datasets.
 
 ---
 
-## 🔮 Future Improvements
+##  Future Improvements
 - Apply non-linear models (Random Forest, XGBoost)  
 - Feature importance analysis  
 - Cross-validation for improved robustness  
