@@ -1,0 +1,11 @@
+node_modules
+src
+public
+*.config.*
+package-lock.json
+package.json
+.git
+.gitignore
+README.md
+api/data/Global renewable and fossil fuel energy.csv
+api/models/lightgbm.pkl
