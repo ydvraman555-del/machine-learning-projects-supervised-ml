@@ -5,7 +5,7 @@
   "framework": "vite",
   "functions": {
     "api/index.py": {
-      "excludeFiles": "{node_modules/**,src/**,public/**,*.json,*.js,*.config.*}"
+      "excludeFiles": "{node_modules/**,src/**,public/**}"
     }
   }
 }
