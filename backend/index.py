@@ -1,12 +1,12 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import json
 import os
-import sys
+import numpy as np
 
-app = FastAPI(title="Clean Energy Intelligence API")
+# Initialize FastAPI App
+app = FastAPI(title="Clean Energy Intelligence API (Render)")
 
 # Enable CORS (Security)
 app.add_middleware(
@@ -16,108 +16,60 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global variables for lazy loading
+# Global variables for caching
 _model = None
 _metadata = None
 
-def get_technical_manifest():
-    """Build a manifest of the system for debugging."""
-    try:
-        task_root = "/var/task" if os.path.exists("/var/task") else os.getcwd()
-        # List files in the root to see where we are
-        root_files = os.listdir(task_root) if os.path.exists(task_root) else []
-        return {
-            "root": task_root,
-            "exists": root_files,
-            "python": sys.version,
-            "path": sys.path
-        }
-    except:
-        return {"error": "Manifest failed"}
-
 def get_resources():
-    """Ultra-robust resource loading with specific path check for Vercel."""
+    """Standard resource loading for Render (Persistent Server)."""
     global _model, _metadata
     if _model is None or _metadata is None:
         try:
-            # 1. Direct path check (Vercel moves files to the root of /var/task)
+            # Use relative paths since Render maintains the folder structure
             base_dir = os.path.dirname(os.path.abspath(__file__))
-            
-            # Try specific Vercel locations
-            candidates = [
-                os.path.join(base_dir, "metadata.json"),
-                os.path.join("/var/task", "metadata.json"),
-                os.path.join("/var/task", "backend", "metadata.json"),
-                "metadata.json"
-            ]
-            
-            metadata_path = next((c for c in candidates if os.path.exists(c)), None)
-            
-            # Try model locations
-            model_candidates = [
-                os.path.join(base_dir, "models", "model.txt"),
-                os.path.join("/var/task", "models", "model.txt"),
-                os.path.join("/var/task", "backend", "models", "model.txt"),
-                "models/model.txt"
-            ]
-            model_path = next((c for c in model_candidates if os.path.exists(c)), None)
+            metadata_path = os.path.join(base_dir, "metadata.json")
+            model_path = os.path.join(base_dir, "models", "model.txt")
 
-            if not metadata_path:
-                raise FileNotFoundError(f"METADATA_NOT_FOUND. Searched: {candidates}")
-            if not model_path:
-                raise FileNotFoundError(f"MODEL_NOT_FOUND. Searched: {model_candidates}")
-
-            # 2. Load Metadata
+            # Load Metadata
+            if not os.path.exists(metadata_path):
+                raise FileNotFoundError(f"Missing {metadata_path}")
+            
             with open(metadata_path, "r") as f:
                 _metadata = json.load(f)
 
-            # 3. Load Model with safety check for LightGBM
-            try:
-                import numpy as np
-                import lightgbm as lgb
-                _model = lgb.Booster(model_file=model_path)
-            except ImportError:
-                # If library is missing, we need to know!
-                raise ImportError("LIBRARY_MISSING: lightgbm or numpy not installed by Vercel.")
+            # Load LightGBM Model
+            import lightgbm as lgb
+            _model = lgb.Booster(model_file=model_path)
+            print("--- Resources Loaded Successfully ---")
             
         except Exception as e:
-            # THIS IS THE KEY: Return exactly what went wrong
-            raise RuntimeError(f"TECH_ERROR: {str(e)}")
+            print(f"ERROR: {str(e)}")
+            raise RuntimeError(f"Initialization Failed: {str(e)}")
     
     return _model, _metadata
 
 @app.get("/")
 def health_check():
-    return {"status": "online", "manifest": get_technical_manifest()}
+    return {"status": "online", "message": "EcoPredict Brain is LIVE on Render", "deployment": "persistent"}
 
 @app.get("/countries")
 def get_countries():
-    try:
-        _, meta = get_resources()
-        return {"countries": meta["countries"]}
-    except Exception as e:
-        # Instead of 500, we return a 200 with the error in it for debugging
-        return JSONResponse(status_code=500, content={"error": str(e), "manifest": get_technical_manifest()})
+    _, meta = get_resources()
+    return {"countries": meta["countries"]}
 
 @app.get("/regions")
 def get_regions():
-    try:
-        _, meta = get_resources()
-        return {"regions": meta["regions"]}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e), "manifest": get_technical_manifest()})
+    _, meta = get_resources()
+    return {"regions": meta["regions"]}
 
 @app.get("/metadata")
 def get_metadata():
-    try:
-        _, meta = get_resources()
-        return {
-            "countries": meta["countries"],
-            "regions": meta["regions"],
-            "mapping": meta["mapping"]
-        }
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+    _, meta = get_resources()
+    return {
+        "countries": meta["countries"],
+        "regions": meta["regions"],
+        "mapping": meta["mapping"]
+    }
 
 class PredictionRequest(BaseModel):
     country: str
@@ -126,18 +78,33 @@ class PredictionRequest(BaseModel):
 @app.post("/predict")
 def predict(request: PredictionRequest):
     try:
-        import numpy as np
         model, meta = get_resources()
+        
         region = meta["mapping"].get(request.country)
         c_code = meta["country_to_code"].get(request.country)
         r_code = meta["region_to_code"].get(region)
+        
+        if c_code is None or r_code is None:
+            raise HTTPException(status_code=400, detail="Invalid country or region")
+
         features = np.array([[c_code, r_code, request.year]])
         prob_clean = float(model.predict(features)[0])
+        prediction = 1 if prob_clean >= 0.5 else 0
+        probs = [1.0 - prob_clean, prob_clean]
+        
         return {
             "country": request.country,
-            "is_clean_dominant": bool(prob_clean >= 0.5),
-            "confidence": float(max([1.0 - prob_clean, prob_clean])),
-            "probabilities": [1.0 - prob_clean, prob_clean]
+            "year": request.year,
+            "region": region,
+            "is_clean_dominant": bool(prediction),
+            "confidence": float(max(probs)),
+            "probabilities": probs
         }
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    # Local testing support
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
