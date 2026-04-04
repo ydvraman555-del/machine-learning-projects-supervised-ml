@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { SkeletonSelect } from './SkeletonLoader';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = '/api';
 
 const PredictionForm = ({ onPredictionResult }) => {
   const [countries, setCountries] = useState([]);

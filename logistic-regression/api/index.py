@@ -22,24 +22,23 @@ def read_root():
     return {"message": "Clean Energy Intelligence API is running", "status": "online"}
 
 # Load data and model
-DATA_PATH = "backend/data/Global renewable and fossil fuel energy.csv"
-MODEL_PATH = "backend/models/lightgbm.pkl"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_PATH = os.path.join(BASE_DIR, "data", "Global renewable and fossil fuel energy.csv")
+MODEL_PATH = os.path.join(BASE_DIR, "models", "lightgbm.pkl")
 
+# Fallback for local dev if folders are moved
 if not os.path.exists(DATA_PATH) or not os.path.exists(MODEL_PATH):
-    # Fallback paths for local relative execution
-    DATA_PATH = "data/Global renewable and fossil fuel energy.csv"
-    MODEL_PATH = "models/lightgbm.pkl"
-    
-    # Root paths fallback
+    # Check parent dir
+    PARENT_DIR = os.path.dirname(BASE_DIR)
+    DATA_PATH = os.path.join(PARENT_DIR, "Global renewable and fossil fuel energy.csv")
     if not os.path.exists(DATA_PATH):
-        DATA_PATH = "../Global renewable and fossil fuel energy.csv"
-    if not os.path.exists(MODEL_PATH):
-        MODEL_PATH = "models/lightgbm.pkl" # This is inside backend/models/ usually
+        DATA_PATH = os.path.join(BASE_DIR, "data", "Global renewable and fossil fuel energy.csv")
 
 try:
     if not os.path.exists(DATA_PATH):
-        # Final desperate check for root relative to where main.py is (one level up)
-        DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Global renewable and fossil fuel energy.csv")
+        raise FileNotFoundError(f"Data file not found at {DATA_PATH}")
+    if not os.path.exists(MODEL_PATH):
+        raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
     
     df = pd.read_csv(DATA_PATH)
     with open(MODEL_PATH, "rb") as f:
