@@ -1,6 +1,5 @@
 fastapi
-uvicorn
-pandas
+pydantic
+numpy
 lightgbm
 scikit-learn
-pydantic

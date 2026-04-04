@@ -1,10 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import pandas as pd
+# import pandas as pd # Removed to save space
+import json
 import numpy as np
 import pickle
-from sklearn.preprocessing import LabelEncoder
+# from sklearn.preprocessing import LabelEncoder # Replaced with manual mapping
 import os
 
 app = FastAPI(title="Clean Energy Intelligence API")
@@ -23,36 +24,28 @@ def read_root():
 
 # Load data and model
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(BASE_DIR, "data", "Global renewable and fossil fuel energy.csv")
+# DATA_PATH = os.path.join(BASE_DIR, "data", "Global renewable and fossil fuel energy.csv")
+METADATA_PATH = os.path.join(BASE_DIR, "metadata.json")
 MODEL_PATH = os.path.join(BASE_DIR, "models", "lightgbm.pkl")
 
-# Fallback for local dev if folders are moved
-if not os.path.exists(DATA_PATH) or not os.path.exists(MODEL_PATH):
-    # Check parent dir
-    PARENT_DIR = os.path.dirname(BASE_DIR)
-    DATA_PATH = os.path.join(PARENT_DIR, "Global renewable and fossil fuel energy.csv")
-    if not os.path.exists(DATA_PATH):
-        DATA_PATH = os.path.join(BASE_DIR, "data", "Global renewable and fossil fuel energy.csv")
-
 try:
-    if not os.path.exists(DATA_PATH):
-        raise FileNotFoundError(f"Data file not found at {DATA_PATH}")
+    if not os.path.exists(METADATA_PATH):
+        raise FileNotFoundError(f"Metadata file not found at {METADATA_PATH}")
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
     
-    df = pd.read_csv(DATA_PATH)
+    with open(METADATA_PATH, "r") as f:
+        metadata = json.load(f)
+    
     with open(MODEL_PATH, "rb") as f:
         model = pickle.load(f)
     
-    # Pre-fit encoders
-    le_country = LabelEncoder()
-    le_country.fit(df["country"])
-    
-    le_region = LabelEncoder()
-    le_region.fit(df["region"])
-    
-    # Metadata mapping
-    country_region_map = df[["country", "region"]].drop_duplicates().set_index("country")["region"].to_dict()
+    # Extract metadata for easy access
+    countries_list = metadata["countries"]
+    regions_list = metadata["regions"]
+    country_region_map = metadata["mapping"]
+    country_to_code = metadata["country_to_code"]
+    region_to_code = metadata["region_to_code"]
     
 except Exception as e:
     print(f"Error initializing backend: {e}")
@@ -64,30 +57,33 @@ class PredictionRequest(BaseModel):
 @app.get("/metadata")
 def get_metadata():
     return {
-        "countries": sorted(df["country"].unique().tolist()),
-        "regions": sorted(df["region"].unique().tolist()),
+        "countries": countries_list,
+        "regions": regions_list,
         "mapping": country_region_map
     }
 
 @app.get("/countries")
 def get_countries():
     return {
-        "countries": sorted(df["country"].unique().tolist())
+        "countries": countries_list
     }
 
 @app.get("/regions")
 def get_regions():
     return {
-        "regions": sorted(df["region"].unique().tolist())
+        "regions": regions_list
     }
 
 @app.post("/predict")
 def predict(request: PredictionRequest):
     try:
         region = country_region_map.get(request.country)
-        c_code = int(le_country.transform([request.country])[0])
-        r_code = int(le_region.transform([region])[0])
+        c_code = country_to_code.get(request.country)
+        r_code = region_to_code.get(region)
         
+        if c_code is None or r_code is None:
+            raise HTTPException(status_code=400, detail="Invalid country or region")
+
         features = np.array([[c_code, r_code, request.year]])
         prediction = int(model.predict(features)[0])
         probs = model.predict_proba(features)[0].tolist()
@@ -110,8 +106,8 @@ def forecast(country: str):
         if not region:
             raise HTTPException(status_code=404, detail="Country not found")
             
-        c_code = int(le_country.transform([country])[0])
-        r_code = int(le_region.transform([region])[0])
+        c_code = country_to_code.get(country)
+        r_code = region_to_code.get(region)
         
         results = []
         # Predict from 2000 to 2042 for a full trendline
