@@ -8,7 +8,7 @@ import sys
 
 app = FastAPI(title="Clean Energy Intelligence API")
 
-# Enable CORS (The Security Lock)
+# Enable CORS (Security)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,88 +20,104 @@ app.add_middleware(
 _model = None
 _metadata = None
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Ensure we return JSON even on crashes, which fixes the CORS error."""
-    return JSONResponse(
-        status_code=500,
-        content={"detail": f"Internal System Error: {str(exc)}", "type": str(type(exc).__name__)},
-        headers={"Access-Control-Allow-Origin": "*"}
-    )
-
-def find_file(filename, search_path):
-    """Recursively search for a file in the given path."""
-    for root, dirs, files in os.walk(search_path):
-        if filename in files:
-            return os.path.join(root, filename)
-    return None
+def get_technical_manifest():
+    """Build a manifest of the system for debugging."""
+    try:
+        task_root = "/var/task" if os.path.exists("/var/task") else os.getcwd()
+        # List files in the root to see where we are
+        root_files = os.listdir(task_root) if os.path.exists(task_root) else []
+        return {
+            "root": task_root,
+            "exists": root_files,
+            "python": sys.version,
+            "path": sys.path
+        }
+    except:
+        return {"error": "Manifest failed"}
 
 def get_resources():
-    """Ultra-robust resource loading using recursive Path-Scanning."""
+    """Ultra-robust resource loading with specific path check for Vercel."""
     global _model, _metadata
     if _model is None or _metadata is None:
         try:
-            # 1. Scan for files starting from the task directory
-            task_root = "/var/task" if os.path.exists("/var/task") else os.getcwd()
+            # 1. Direct path check (Vercel moves files to the root of /var/task)
+            base_dir = os.path.dirname(os.path.abspath(__file__))
             
-            metadata_path = find_file("metadata.json", task_root)
-            model_path = find_file("model.txt", task_root)
+            # Try specific Vercel locations
+            candidates = [
+                os.path.join(base_dir, "metadata.json"),
+                os.path.join("/var/task", "metadata.json"),
+                os.path.join("/var/task", "backend", "metadata.json"),
+                "metadata.json"
+            ]
+            
+            metadata_path = next((c for c in candidates if os.path.exists(c)), None)
+            
+            # Try model locations
+            model_candidates = [
+                os.path.join(base_dir, "models", "model.txt"),
+                os.path.join("/var/task", "models", "model.txt"),
+                os.path.join("/var/task", "backend", "models", "model.txt"),
+                "models/model.txt"
+            ]
+            model_path = next((c for c in model_candidates if os.path.exists(c)), None)
 
-            if not metadata_path or not model_path:
-                # Fallback to absolute local check if scanning fails
-                base_dir = os.path.dirname(os.path.abspath(__file__))
-                metadata_path = metadata_path or os.path.join(base_dir, "metadata.json")
-                model_path = model_path or os.path.join(base_dir, "models", "model.txt")
-
-            if not os.path.exists(metadata_path):
-                raise FileNotFoundError(f"Metadata scanning failed. Root: {task_root}")
+            if not metadata_path:
+                raise FileNotFoundError(f"METADATA_NOT_FOUND. Searched: {candidates}")
+            if not model_path:
+                raise FileNotFoundError(f"MODEL_NOT_FOUND. Searched: {model_candidates}")
 
             # 2. Load Metadata
             with open(metadata_path, "r") as f:
                 _metadata = json.load(f)
 
-            # 3. Load Model (Import heavy libraries ONLY when needed)
-            import numpy as np
-            import lightgbm as lgb
-            _model = lgb.Booster(model_file=model_path)
+            # 3. Load Model with safety check for LightGBM
+            try:
+                import numpy as np
+                import lightgbm as lgb
+                _model = lgb.Booster(model_file=model_path)
+            except ImportError:
+                # If library is missing, we need to know!
+                raise ImportError("LIBRARY_MISSING: lightgbm or numpy not installed by Vercel.")
             
         except Exception as e:
-            raise RuntimeError(f"Scanner Failure: {str(e)}")
+            # THIS IS THE KEY: Return exactly what went wrong
+            raise RuntimeError(f"TECH_ERROR: {str(e)}")
     
     return _model, _metadata
 
 @app.get("/")
 def health_check():
-    return {"status": "online", "system": "Clean Energy API Scanner active"}
-
-@app.get("/debug-paths")
-def debug_paths():
-    """Helper to see where Vercel is putting your files."""
-    return {
-        "cwd": os.getcwd(),
-        "files": os.listdir(os.getcwd()),
-        "task_exists": os.path.exists("/var/task"),
-        "root_files": os.listdir("/var/task") if os.path.exists("/var/task") else []
-    }
+    return {"status": "online", "manifest": get_technical_manifest()}
 
 @app.get("/countries")
 def get_countries():
-    _, meta = get_resources()
-    return {"countries": meta["countries"]}
+    try:
+        _, meta = get_resources()
+        return {"countries": meta["countries"]}
+    except Exception as e:
+        # Instead of 500, we return a 200 with the error in it for debugging
+        return JSONResponse(status_code=500, content={"error": str(e), "manifest": get_technical_manifest()})
 
 @app.get("/regions")
 def get_regions():
-    _, meta = get_resources()
-    return {"regions": meta["regions"]}
+    try:
+        _, meta = get_resources()
+        return {"regions": meta["regions"]}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e), "manifest": get_technical_manifest()})
 
 @app.get("/metadata")
 def get_metadata():
-    _, meta = get_resources()
-    return {
-        "countries": meta["countries"],
-        "regions": meta["regions"],
-        "mapping": meta["mapping"]
-    }
+    try:
+        _, meta = get_resources()
+        return {
+            "countries": meta["countries"],
+            "regions": meta["regions"],
+            "mapping": meta["mapping"]
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 class PredictionRequest(BaseModel):
     country: str
@@ -109,19 +125,19 @@ class PredictionRequest(BaseModel):
 
 @app.post("/predict")
 def predict(request: PredictionRequest):
-    import numpy as np
-    model, meta = get_resources()
-    
-    region = meta["mapping"].get(request.country)
-    c_code = meta["country_to_code"].get(request.country)
-    r_code = meta["region_to_code"].get(region)
-    
-    features = np.array([[c_code, r_code, request.year]])
-    prob_clean = float(model.predict(features)[0])
-    
-    return {
-        "country": request.country,
-        "is_clean_dominant": bool(prob_clean >= 0.5),
-        "confidence": float(max([1.0 - prob_clean, prob_clean])),
-        "probabilities": [1.0 - prob_clean, prob_clean]
-    }
+    try:
+        import numpy as np
+        model, meta = get_resources()
+        region = meta["mapping"].get(request.country)
+        c_code = meta["country_to_code"].get(request.country)
+        r_code = meta["region_to_code"].get(region)
+        features = np.array([[c_code, r_code, request.year]])
+        prob_clean = float(model.predict(features)[0])
+        return {
+            "country": request.country,
+            "is_clean_dominant": bool(prob_clean >= 0.5),
+            "confidence": float(max([1.0 - prob_clean, prob_clean])),
+            "probabilities": [1.0 - prob_clean, prob_clean]
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
