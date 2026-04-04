@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import json
 import numpy as np
 import os
+import sys
 
 app = FastAPI(title="Clean Energy Intelligence API")
 
@@ -20,37 +21,54 @@ _model = None
 _metadata = None
 
 def get_resources():
-    """Lazy load the model and metadata to avoid boot-up crashes."""
+    """Defensive lazy load of model and metadata."""
     global _model, _metadata
     if _model is None or _metadata is None:
         try:
-            # Use absolute path relative to this file
+            # 1. Determine the correct base directory
+            # In Vercel, files might be moved, so we check multiple levels
             base_dir = os.path.dirname(os.path.abspath(__file__))
-            metadata_path = os.path.join(base_dir, "metadata.json")
-            model_path = os.path.join(base_dir, "models", "model.txt")
+            
+            # Paths to search
+            meta_options = [
+                os.path.join(base_dir, "metadata.json"),
+                os.path.join(base_dir, "..", "metadata.json"), # fallback for nested structures
+            ]
+            model_options = [
+                os.path.join(base_dir, "models", "model.txt"),
+                os.path.join(base_dir, "..", "models", "model.txt"),
+                os.path.join(base_dir, "model.txt")
+            ]
 
-            # Check if files exist
-            if not os.path.exists(metadata_path):
-                raise FileNotFoundError(f"Metadata not found at {metadata_path}")
-            if not os.path.exists(model_path):
-                raise FileNotFoundError(f"Model not found at {model_path}")
+            metadata_path = next((p for p in meta_options if os.path.exists(p)), None)
+            model_path = next((p for p in model_options if os.path.exists(p)), None)
 
-            # Load Metadata
+            if not metadata_path:
+                raise FileNotFoundError(f"Missing metadata.json. Searched: {meta_options}")
+            if not model_path:
+                raise FileNotFoundError(f"Missing model.txt. Searched: {model_options}")
+
+            # 2. Load Metadata
             with open(metadata_path, "r") as f:
                 _metadata = json.load(f)
 
-            # Import LightGBM ONLY when needed (Lazy Loading)
+            # 3. Load Model (Lazy Import LightGBM to save memory)
             import lightgbm as lgb
             _model = lgb.Booster(model_file=model_path)
             
         except Exception as e:
-            raise RuntimeError(f"Initialization Failed: {str(e)}")
+            # Re-raise with detail so it shows in Vercel logs
+            raise RuntimeError(f"API INIT FAILED: {str(e)}")
     
     return _model, _metadata
 
 @app.get("/")
-def read_root():
-    return {"message": "Clean Energy Intelligence API is running", "status": "online"}
+def health_check():
+    return {
+        "status": "online",
+        "message": "Clean Energy API is active",
+        "python": sys.version.split()[0]
+    }
 
 @app.get("/countries")
 def get_countries():
@@ -85,23 +103,22 @@ def predict(request: PredictionRequest):
         r_code = meta["region_to_code"].get(region)
         
         if c_code is None or r_code is None:
-            raise HTTPException(status_code=400, detail="Invalid country or region")
+            raise HTTPException(status_code=400, detail=f"Invalid location: {request.country}")
 
         features = np.array([[c_code, r_code, request.year]])
         prob_clean = float(model.predict(features)[0])
         prediction = 1 if prob_clean >= 0.5 else 0
-        probs = [1.0 - prob_clean, prob_clean]
         
         return {
             "country": request.country,
             "year": request.year,
             "region": region,
             "is_clean_dominant": bool(prediction),
-            "confidence": float(max(probs)),
-            "probabilities": probs
+            "confidence": float(max([1.0 - prob_clean, prob_clean])),
+            "probabilities": [1.0 - prob_clean, prob_clean]
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Prediction Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Prediction System Failure: {str(e)}")
 
 @app.get("/forecast/{country}")
 def forecast(country: str):
@@ -131,4 +148,4 @@ def forecast(country: str):
             "forecast": results
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Forecast Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Forecast System Failure: {str(e)}")
