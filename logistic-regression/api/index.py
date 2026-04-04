@@ -1,12 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-# import pandas as pd # Removed to save space
 import json
 import numpy as np
-import pickle
-# from sklearn.preprocessing import LabelEncoder # Replaced with manual mapping
 import os
+import lightgbm as lgb
 
 app = FastAPI(title="Clean Energy Intelligence API")
 
@@ -24,21 +22,20 @@ def read_root():
 
 # Load data and model
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# DATA_PATH = os.path.join(BASE_DIR, "data", "Global renewable and fossil fuel energy.csv")
 METADATA_PATH = os.path.join(BASE_DIR, "metadata.json")
-MODEL_PATH = os.path.join(BASE_DIR, "models", "lightgbm.pkl")
+MODEL_PATH = os.path.join(BASE_DIR, "models", "model.txt")  # Using native format
 
 try:
     if not os.path.exists(METADATA_PATH):
         raise FileNotFoundError(f"Metadata file not found at {METADATA_PATH}")
     if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
+        raise FileNotFoundError(f"Native model file not found at {MODEL_PATH}")
     
     with open(METADATA_PATH, "r") as f:
         metadata = json.load(f)
     
-    with open(MODEL_PATH, "rb") as f:
-        model = pickle.load(f)
+    # Load native LightGBM booster (No Scikit-learn or SciPy required!)
+    model = lgb.Booster(model_file=MODEL_PATH)
     
     # Extract metadata for easy access
     countries_list = metadata["countries"]
@@ -85,15 +82,17 @@ def predict(request: PredictionRequest):
             raise HTTPException(status_code=400, detail="Invalid country or region")
 
         features = np.array([[c_code, r_code, request.year]])
-        prediction = int(model.predict(features)[0])
-        probs = model.predict_proba(features)[0].tolist()
+        # Native booster predict returns probability of class 1 (Clean)
+        prob_clean = float(model.predict(features)[0])
+        prediction = 1 if prob_clean >= 0.5 else 0
+        probs = [1.0 - prob_clean, prob_clean]
         
         return {
             "country": request.country,
             "year": request.year,
             "region": region,
             "is_clean_dominant": bool(prediction),
-            "confidence": max(probs),
+            "confidence": float(max(probs)),
             "probabilities": probs
         }
     except Exception as e:
@@ -113,12 +112,12 @@ def forecast(country: str):
         # Predict from 2000 to 2042 for a full trendline
         for year in range(2000, 2043):
             features = np.array([[c_code, r_code, year]])
-            prob_clean = model.predict_proba(features)[0][1] # Probability of True/1
+            prob_clean = float(model.predict(features)[0])
             
             results.append({
                 "year": year,
                 "probability": round(prob_clean, 4),
-                "is_clean": bool(model.predict(features)[0])
+                "is_clean": bool(prob_clean >= 0.5)
             })
             
         return {
