@@ -11,11 +11,10 @@ import {
 } from 'lucide-react';
 import { SkeletonSelect } from './SkeletonLoader';
 
-const API_BASE = import.meta.env.VITE_API_BASE || '/api';
-console.log('--- EcoPredict Connection Diagnostic ---');
-console.log('VITE_API_BASE from Env:', import.meta.env.VITE_API_BASE);
-console.log('Final API_BASE being used:', API_BASE);
-console.log('---------------------------------------');
+const raw_api_base = import.meta.env.VITE_API_BASE || '/api';
+const API_BASE = raw_api_base.endsWith('/') ? raw_api_base.slice(0, -1) : raw_api_base;
+console.log('--- EcoPredict Connection Shield Active ---');
+console.log('Using API Base:', API_BASE);
 
 const PredictionForm = ({ onPredictionResult }) => {
   const [countries, setCountries] = useState([]);
