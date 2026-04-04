@@ -12,6 +12,7 @@ import {
 import { SkeletonSelect } from './SkeletonLoader';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+console.log('EcoPredict System Connection:', API_BASE);
 
 const PredictionForm = ({ onPredictionResult }) => {
   const [countries, setCountries] = useState([]);
