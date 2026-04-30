@@ -91,9 +91,9 @@ Data Collection → Data Cleaning → EDA → Feature Engineering → Encoding �
 
 ## Results & Performance
 
-- Random Forest Accuracy: **~94.9%** :contentReference[oaicite:1]{index=1}  
-- ROC-AUC Score: **~0.9899** :contentReference[oaicite:2]{index=2}  
-- Cross-Validation AUC: **~0.9900** :contentReference[oaicite:3]{index=3}  
+- Random Forest Accuracy: **~94.9%**   
+- ROC-AUC Score: **~0.9899** 
+- Cross-Validation AUC: **~0.9900** 
 
 ### Model Comparison (Accuracy)
 
