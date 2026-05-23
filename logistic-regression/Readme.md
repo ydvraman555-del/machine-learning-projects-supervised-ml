@@ -1,5 +1,7 @@
 # Clean Energy Dominance Prediction using Logistic Regression
 
+🔗 **Live Demo:** [Try the Application](YOUR_DEPLOYMENT_LINK)
+
 A machine learning classification project to predict whether a country’s electricity generation is dominated by clean energy sources using real-world global energy data.
 
 ---
@@ -134,7 +136,6 @@ It highlights the importance of feature relationships, the effectiveness of boos
 
 ## Future Improvements
 
-- Deploy the model using Flask or Streamlit  
 - Perform feature importance and SHAP analysis  
 - Incorporate time-series analysis for trend prediction  
 - Use additional datasets for improved generalization  
@@ -148,9 +149,10 @@ It highlights the importance of feature relationships, the effectiveness of boos
 - Advanced model comparison  
 - High accuracy with LightGBM (~96.9%)  
 - Strong exploratory data analysis and visualization  
+- Live deployed machine learning application  
 
 ---
 
 ## Acknowledgment
 
-This project strengthened my understanding of classification models, evaluation techniques, and real-world data preprocessing, along with practical experience in ensemble and boosting methods.
+This project strengthened my understanding of classification models, evaluation techniques, real-world data preprocessing, ensemble learning, boosting algorithms, and machine learning model deployment.
