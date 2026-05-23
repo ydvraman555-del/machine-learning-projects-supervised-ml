@@ -1,6 +1,6 @@
 # Clean Energy Dominance Prediction using Logistic Regression
 
-🔗 **Live Demo:** [Try the Application](YOUR_DEPLOYMENT_LINK)
+🔗 **Live Demo:** https://ecopredict-analytics.vercel.app/
 
 A machine learning classification project to predict whether a country’s electricity generation is dominated by clean energy sources using real-world global energy data.
 
