@@ -34,6 +34,7 @@ For each project, I followed a complete Machine Learning workflow:
 - NumPy
 - Matplotlib
 - Seaborn
+- Plotly
 - Scikit-learn
 - Jupyter Notebook
 
